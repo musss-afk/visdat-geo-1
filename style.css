@@ -1,0 +1,193 @@
+/* --- Global & Typography --- */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+
+body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    background-color: #121212; /* Latar belakang utama (sangat gelap) */
+    color: #f0f0f0; /* Teks default (putih pudar) */
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 20px;
+}
+
+h1 {
+    text-align: center;
+    color: #ffffff;
+    margin-bottom: 10px;
+    font-weight: 700;
+}
+
+p {
+    text-align: center;
+    color: #a0a0a0; /* Teks subjudul (abu-abu) */
+    margin-bottom: 25px;
+    font-size: 1.1em;
+}
+
+/* --- Kontainer Utama --- */
+.container {
+    background-color: #1e1e1e; /* Latar belakang kontainer (gelap) */
+    padding: 20px 30px 30px 30px;
+    border-radius: 12px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+    border: 1px solid #333;
+    width: 90%;
+    max-width: 1000px;
+    margin: auto;
+}
+
+/* --- Kontrol (Dropdown, Tombol, Slider) --- */
+.controls {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+    border-bottom: 1px solid #333; /* Garis pemisah */
+    padding-bottom: 20px;
+}
+
+.control-group { display: flex; align-items: center; }
+.control-group-slider { display: flex; align-items: center; flex-grow: 1; margin-left: 20px; min-width: 300px; }
+
+label {
+    margin-right: 10px;
+    font-weight: 600;
+    color: #f0f0f0;
+}
+
+select, button {
+    padding: 9px 13px;
+    border-radius: 6px;
+    border: 1px solid #444;
+    background-color: #2a2a2a; /* Latar belakang tombol/select */
+    color: #f0f0f0; /* Teks tombol/select */
+    cursor: pointer;
+    font-size: 14px;
+    transition: background-color 0.2s, border-color 0.2s;
+}
+
+select:hover, button:hover {
+    background-color: #333;
+    border-color: #555;
+}
+
+button#play-pause-button {
+    background-color: #007bff; /* Warna aksen biru cerah */
+    color: white;
+    border-color: #007bff;
+    font-weight: 600;
+    min-width: 80px;
+}
+
+button#play-pause-button:hover {
+    background-color: #0056b3; /* Biru lebih gelap saat hover */
+    border-color: #0056b3;
+}
+
+#date-display {
+    margin: 0 15px;
+    font-weight: 600;
+    color: #e74c3c; /* Warna aksen merah untuk tanggal */
+    font-size: 1.1em;
+    min-width: 120px;
+}
+
+/* --- Slider Modern --- */
+.slider {
+    -webkit-appearance: none;
+    width: 100%;
+    height: 6px;
+    background: #444; /* Rel slider */
+    outline: none;
+    border-radius: 3px;
+}
+
+.slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 20px;
+    height: 20px;
+    background: #e74c3c; /* Tombol slider (merah) */
+    cursor: pointer;
+    border-radius: 50%;
+    border: 2px solid #fff; /* Lingkaran putih di dalam tombol */
+    box-shadow: 0 0 5px rgba(231, 76, 60, 0.5);
+}
+
+/* --- Peta (Map) --- */
+#map-container {
+    background-color: #1a1a1a; /* Latar belakang peta */
+    border: 1px solid #333;
+    border-radius: 8px;
+    overflow: hidden; /* Memastikan peta tetap di dalam border */
+}
+
+#map-chart {
+    width: 100%;
+    height: 500px;
+}
+
+.province {
+    stroke: #aaa; /* Batas antar provinsi (abu-abu terang) */
+    stroke-width: 0.5px;
+    transition: fill 0.3s ease;
+}
+
+.province:hover {
+    stroke: #ffffff; /* Batas provinsi (putih cerah) saat hover */
+    stroke-width: 1.5px;
+    cursor: pointer;
+}
+
+/* --- Timeline / Brush --- */
+#context-chart-container { width: 100%; margin-top: 10px; }
+#context-chart { width: 100%; height: 120px; }
+
+.context-area {
+    fill: #007bff; /* Area timeline (biru) */
+    fill-opacity: 0.6;
+}
+
+.context-axis .domain { stroke: #555; }
+.context-axis .tick text { fill: #999; }
+.context-axis .tick line { stroke: #333; }
+
+.brush .selection {
+    fill: #007bff;
+    fill-opacity: 0.3;
+    stroke: #007bff;
+}
+
+/* Anotasi (Tetap merah agar kontras) */
+.annotation-line {
+    stroke: #e74c3c;
+    stroke-width: 1.5px;
+    stroke-dasharray: 4, 4;
+    opacity: 0.8;
+}
+.annotation-text {
+    font-size: 12px;
+    fill: #e74c3c;
+    font-weight: 600;
+    text-anchor: middle;
+}
+
+/* --- Tooltip (Efek Kaca / Glassmorphism) --- */
+.tooltip {
+    position: absolute;
+    background: rgba(20, 20, 20, 0.7); /* Latar belakang transparan gelap */
+    backdrop-filter: blur(8px); /* Efek blur "kaca" */
+    -webkit-backdrop-filter: blur(8px);
+    color: #fff;
+    padding: 10px 15px;
+    border-radius: 8px;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.2s;
+    font-size: 14px;
+    white-space: nowrap;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+}
