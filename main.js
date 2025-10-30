@@ -6,8 +6,7 @@ document.addEventListener("DOMContentLoaded", function() {
     let allData, nestedData, dateRange, filteredDateRange, geoData;
     let dataByProvinceByDate = new Map();
 
-    // --- BARU: Kamus Penerjemah Nama Provinsi ---
-    // Ini menjembatani perbedaan antara file JSON dan CSV Anda
+    // --- Kamus Penerjemah Nama Provinsi ---
     const geoJsonToCsvNameMap = {
         "Jakarta Raya": "DKI Jakarta",
         "Yogyakarta": "Daerah Istimewa Yogyakarta",
@@ -15,14 +14,10 @@ document.addEventListener("DOMContentLoaded", function() {
         "Bangka-Belitung": "Kepulauan Bangka Belitung"
     };
 
-    // Fungsi helper untuk mendapatkan nama CSV yang benar
     function getCsvName(geoJsonName) {
-        // Jika nama ada di kamus, kembalikan nama dari CSV.
-        // Jika tidak, berarti namanya sudah sama, jadi kembalikan nama aslinya.
         return geoJsonToCsvNameMap[geoJsonName] || geoJsonName;
     }
-    // ---------------------------------------------
-
+    
     // Formatters
     const parseDate = d3.timeParse("%m/%d/%Y");
     const formatDate = d3.timeFormat("%b %d, %Y");
@@ -51,7 +46,13 @@ document.addEventListener("DOMContentLoaded", function() {
     const tooltip = d3.select("#tooltip");
 
     // Scales
-    const colorScale = d3.scaleSequential(d3.interpolateReds).domain([0, 1000]); 
+    // --- PERUBAHAN WARNA PETA ---
+    // Menggunakan skala sekuensial yang dibalik: (1-t)
+    // d3.interpolateRdYlGn(1) = Hijau (untuk 0)
+    // d3.interpolateRdYlGn(0) = Merah (untuk max)
+    const colorScale = d3.scaleSequential((t) => d3.interpolateRdYlGn(1 - t)).domain([0, 1000]); 
+    // ----------------------------
+
     const contextXScale = d3.scaleTime().range([0, contextWidth]);
     const contextYScale = d3.scaleLinear().range([contextHeight, 0]);
 
@@ -79,23 +80,19 @@ document.addEventListener("DOMContentLoaded", function() {
             d.Province = d.Province.trim();
             return d;
         }),
-        d3.json("indonesia-provinces.json") // Memuat file JSON Anda
+        d3.json("indonesia-provinces.json") 
     ]).then(([covidData, indonesiaGeo]) => {
         allData = covidData;
-        // DIUBAH: Gunakan format GeoJSON langsung (bukan TopoJSON)
         geoData = indonesiaGeo; 
         
-        // Memproses data COVID untuk pencarian cepat
         nestedData = d3.group(allData, d => d.Date);
         dateRange = Array.from(nestedData.keys()).sort(d3.ascending);
         filteredDateRange = dateRange;
         
-        // Membuat lookup map: Map[Date -> Map[Province(CSV) -> Data]]
         dataByProvinceByDate = new Map();
         for (let [date, values] of nestedData.entries()) {
             const provinceMap = new Map();
             for (let row of values) {
-                // Kunci di sini adalah nama dari CSV (misal 'DKI Jakarta')
                 provinceMap.set(row.Province, row);
             }
             dataByProvinceByDate.set(date, provinceMap);
@@ -103,7 +100,10 @@ document.addEventListener("DOMContentLoaded", function() {
         
         dateSlider.attr("max", dateRange.length - 1);
         
-        setupContextChart(); 
+        // Panggil DUA FUNGSI INI SETELAH allData dimuat
+        updateColorScale(); // Set skala warna berdasarkan data penuh
+        setupContextChart(); // Setup timeline (sekarang perlu allData)
+        
         drawMap(); 
         update(0); 
 
@@ -112,8 +112,8 @@ document.addEventListener("DOMContentLoaded", function() {
         dateSlider.on("input", () => update(+dateSlider.property("value")));
         metricSelect.on("change", () => {
             selectedMetric = metricSelect.property("value");
-            updateContextChart(); 
-            updateColorScale(); 
+            updateContextChart(); // Update timeline bars
+            updateColorScale(); // Update domain skala warna
             update(+dateSlider.property("value"));
         });
 
@@ -129,17 +129,17 @@ document.addEventListener("DOMContentLoaded", function() {
             .append("path")
             .attr("class", "province")
             .attr("d", path)
-            .attr("fill", "#ccc") 
+            // --- PERUBAHAN WARNA DEFAULT ---
+            .attr("fill", "#444") // Warna default 'no data' untuk dark mode
+            // -----------------------------
             .on("mouseover", (event, d) => {
                 tooltip.style("opacity", 1);
             })
             .on("mousemove", (event, d) => {
-                // DIUBAH: Gunakan kunci 'name' dan terjemahkan
                 const geoJsonName = d.properties.name; 
-                const csvName = getCsvName(geoJsonName); // Terjemahkan ke nama CSV
+                const csvName = getCsvName(geoJsonName); 
                 
                 const currentDate = filteredDateRange[+dateSlider.property("value")];
-                // Cari data menggunakan nama CSV
                 const provinceData = dataByProvinceByDate.get(currentDate)?.get(csvName); 
                 
                 let value = "N/A";
@@ -147,7 +147,6 @@ document.addEventListener("DOMContentLoaded", function() {
                     value = formatNumber(provinceData[selectedMetric]);
                 }
 
-                // Tampilkan nama dari JSON (lebih rapi, misal 'Yogyakarta')
                 tooltip.html(`<strong>${geoJsonName}</strong><br>${selectedMetric}: ${value}`)
                        .style("left", (event.pageX + 15) + "px")
                        .style("top", (event.pageY - 28) + "px");
@@ -165,23 +164,43 @@ document.addEventListener("DOMContentLoaded", function() {
     }
     
     // --- 5. CONTEXT CHART (TIMELINE & BRUSH) ---
-    // (Fungsi ini tidak berubah)
+    // --- DIROMBAK TOTAL UNTUK GRAFIK BATANG ---
     function setupContextChart() {
-        const nationalTotals = Array.from(nestedData, ([date, values]) => {
-            return { date: date, value: d3.sum(values, v => v[selectedMetric]) };
-        });
-        
-        contextXScale.domain(d3.extent(dateRange));
-        contextYScale.domain([0, d3.max(nationalTotals, d => d.value)]);
+        // Agregasi data per minggu
+        const weeklyTotals = d3.rollups(
+            allData,
+            v => d3.sum(v, d => d[selectedMetric]),
+            d => d3.timeWeek.floor(d.Date) // Kelompokkan per minggu
+        )
+        .map(([date, value]) => ({ date, value }))
+        .sort((a, b) => a.date - b.date);
 
-        const contextArea = d3.area()
-            .x(d => contextXScale(d.date))
-            .y0(contextHeight)
-            .y1(d => contextYScale(d.value));
-        
-        contextSvg.append("path").datum(nationalTotals).attr("class", "context-area").attr("d", contextArea);
-        contextSvg.append("g").attr("class", "context-axis").attr("transform", `translate(0,${contextHeight})`).call(d3.axisBottom(contextXScale).ticks(d3.timeYear.every(1)));
+        // Set domain X dan Y berdasarkan data mingguan
+        contextXScale.domain(d3.extent(weeklyTotals, d => d.date));
+        contextYScale.domain([0, d3.max(weeklyTotals, d => d.value)]);
 
+        // Hitung lebar bar
+        const weeks = d3.timeWeek.range(contextXScale.domain()[0], contextXScale.domain()[1]);
+        const barWidth = (contextWidth / weeks.length);
+
+        // Gambar Sumbu X
+        contextSvg.append("g")
+            .attr("class", "context-axis")
+            .attr("transform", `translate(0,${contextHeight})`)
+            .call(d3.axisBottom(contextXScale).ticks(d3.timeYear.every(1)));
+        
+        // Buat grup untuk bar
+        contextSvg.append("g")
+            .attr("class", "context-bars")
+            .selectAll("rect")
+            .data(weeklyTotals)
+            .join("rect") // .join() modern untuk enter
+            .attr("x", d => contextXScale(d.date))
+            .attr("y", d => contextYScale(d.value))
+            .attr("width", barWidth > 1 ? barWidth - 1 : barWidth) // Padding 1px jika muat
+            .attr("height", d => contextHeight - contextYScale(d.value));
+
+        // Anotasi (Tetap sama)
         const annotations = [{ date: "2021-07-15", label: "Puncak Delta" }, { date: "2022-02-15", label: "Puncak Omicron" }];
         annotations.forEach(ann => {
             const xPos = contextXScale(parseDate(ann.date.replace(/-/g, '/')));
@@ -190,8 +209,11 @@ document.addEventListener("DOMContentLoaded", function() {
             g.append("text").attr("class", "annotation-text").attr("x", xPos).attr("y", 10).text(ann.label);
         });
 
+        // Brush (Tetap sama)
         const brush = d3.brushX().extent([[0, 0], [contextWidth, contextHeight]]).on("end", brushed);
-        contextSvg.append("g").attr("class", "brush").call(brush);
+        contextSvg.append("g")
+            .attr("class", "brush")
+            .call(brush);
 
         function brushed({ selection }) {
             if (selection) {
@@ -202,26 +224,67 @@ document.addEventListener("DOMContentLoaded", function() {
             }
             dateSlider.attr("max", filteredDateRange.length - 1);
             dateSlider.property("value", 0);
-            updateColorScale(); 
+            updateColorScale(); // Perbarui skala warna berdasarkan rentang waktu baru
             update(0);
         }
     }
     
+    // --- DIROMBAK TOTAL UNTUK UPDATE GRAFIK BATANG ---
     function updateContextChart() {
-        const nationalTotals = Array.from(nestedData, ([date, values]) => {
-            return { date: date, value: d3.sum(values, v => v[selectedMetric]) };
-        });
-        contextYScale.domain([0, d3.max(nationalTotals, d => d.value)]);
-        const contextArea = d3.area().x(d => contextXScale(d.date)).y0(contextHeight).y1(d => contextYScale(d.value));
-        contextSvg.select(".context-area").datum(nationalTotals).transition().duration(500).attr("d", contextArea);
+        // Agregasi data mingguan berdasarkan metrik yang DIPILIH
+        const weeklyTotals = d3.rollups(
+            allData,
+            v => d3.sum(v, d => v[selectedMetric]), // Gunakan selectedMetric
+            d => d3.timeWeek.floor(d.Date)
+        )
+        .map(([date, value]) => ({ date, value }))
+        .sort((a, b) => a.date - b.date);
+        
+        // Update Y scale domain
+        contextYScale.domain([0, d3.max(weeklyTotals, d => d.value)]);
+
+        // Hitung lebar bar lagi
+        const weeks = d3.timeWeek.range(contextXScale.domain()[0], contextXScale.domain()[1]);
+        const barWidth = (contextWidth / weeks.length);
+        
+        // Data join untuk update bar
+        const bars = contextSvg.select(".context-bars")
+            .selectAll("rect")
+            .data(weeklyTotals);
+            
+        bars.join( // Gunakan join untuk enter/update/exit
+            enter => enter.append("rect") // Harusnya tidak terjadi, tapi untuk jaga-jaga
+                .attr("x", d => contextXScale(d.date))
+                .attr("width", barWidth > 1 ? barWidth - 1 : barWidth)
+                .attr("y", contextHeight)
+                .attr("height", 0)
+                .call(enter => enter.transition().duration(500)
+                    .attr("y", d => contextYScale(d.value))
+                    .attr("height", d => contextHeight - contextYScale(d.value))),
+            update => update // Transisi update
+                .call(update => update.transition().duration(500)
+                    .attr("y", d => contextYScale(d.value))
+                    .attr("height", d => contextHeight - contextYScale(d.value))),
+            exit => exit.call(exit => exit.transition().duration(500) // Harusnya tidak terjadi
+                .attr("y", contextHeight)
+                .attr("height", 0)
+                .remove())
+        );
     }
     
     function updateColorScale() {
+        // Perbarui domain skala warna berdasarkan data yang difilter
         let maxVal = 0;
-        for (const date of filteredDateRange) {
-            const dailyMax = d3.max(nestedData.get(date) || [], d => d[selectedMetric]);
-            if (dailyMax > maxVal) maxVal = dailyMax;
+        let dataToScan = (filteredDateRange.length > 0) ? filteredDateRange : dateRange;
+
+        for (const date of dataToScan) {
+            const dailyData = nestedData.get(date);
+            if (dailyData) {
+                const dailyMax = d3.max(dailyData, d => d[selectedMetric]);
+                if (dailyMax > maxVal) maxVal = dailyMax;
+            }
         }
+        // Set domain: 0 akan jadi Hijau, maxVal akan jadi Merah
         colorScale.domain([0, maxVal > 0 ? maxVal : 1]);
     }
 
@@ -242,17 +305,18 @@ document.addEventListener("DOMContentLoaded", function() {
             .transition()
             .duration(isPlaying ? 150 : 0) 
             .attr("fill", d => {
-                // DIUBAH: Gunakan kunci 'name' dan terjemahkan
                 const geoJsonName = d.properties.name;
-                const csvName = getCsvName(geoJsonName); // Terjemahkan
-                
-                // Cari data menggunakan nama CSV
+                const csvName = getCsvName(geoJsonName);
                 const provinceData = currentDataByProvince.get(csvName); 
                 
-                if (provinceData && provinceData[selectedMetric] > 0) {
+                if (provinceData) {
+                    // Gunakan skala warna. 
+                    // Jika 0, colorScale(0) akan mengembalikan Hijau.
                     return colorScale(provinceData[selectedMetric]);
                 } else {
-                    return "#ccc"; // Warna default
+                    // --- PERUBAHAN WARNA DEFAULT ---
+                    return "#444"; // Warna 'no data'
+                    // -----------------------------
                 }
             });
     }
